@@ -279,7 +279,9 @@ impl AppState {
         let render_pipeline = {
             let shader = wgpu::ShaderModuleDescriptor {
                 label: Some("Normal Shader"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
+                source: wgpu::ShaderSource::Wgsl(
+                    include_str!("../assets/shaders/shader.wgsl").into(),
+                ),
             };
 
             create_render_pipeline(
@@ -302,7 +304,9 @@ impl AppState {
                 });
             let shader = wgpu::ShaderModuleDescriptor {
                 label: Some("Light Shader"),
-                source: wgpu::ShaderSource::Wgsl(include_str!("light.wgsl").into()),
+                source: wgpu::ShaderSource::Wgsl(
+                    include_str!("../assets/shaders/light.wgsl").into(),
+                ),
             };
             create_render_pipeline(
                 &backend.device,
@@ -351,7 +355,7 @@ impl AppState {
                     usage: wgpu::BufferUsages::VERTEX,
                 });
 
-        let obj_model = match render_lib::resources::load_model(
+        let obj_model = match render_lib::assets::load_model(
             "cube/cube.obj",
             &backend.device,
             &backend.queue,
