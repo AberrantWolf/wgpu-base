@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::*;
+use wgpu::ExperimentalFeatures;
 use winit::window::Window;
 
 pub struct RenderBackend {
@@ -36,6 +37,7 @@ impl RenderBackend {
                 required_limits: wgpu::Limits::defaults(),
                 memory_hints: Default::default(),
                 trace: wgpu::Trace::Off,
+                experimental_features: ExperimentalFeatures::disabled(),
             })
             .await?;
 

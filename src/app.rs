@@ -7,17 +7,18 @@ use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::Window;
 
-mod backend;
+mod render_lib;
+
 mod camera;
 mod model;
 mod render;
 mod resources;
 mod texture;
 
-use backend::RenderBackend;
 use camera::{Camera, CameraController, CameraUniform};
 use model::Vertex;
 use render::create_render_pipeline;
+use render_lib::backend::RenderBackend;
 
 struct Instance {
     position: cgmath::Vector3<f32>,
