@@ -1,4 +1,4 @@
-use crate::{model, texture};
+use super::{model, texture};
 use std::{
     io::{BufReader, Cursor},
     path::Path,

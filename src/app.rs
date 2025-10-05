@@ -9,16 +9,10 @@ use winit::window::Window;
 
 mod render_lib;
 
-mod camera;
-mod model;
-mod render;
-mod resources;
-mod texture;
-
-use camera::{Camera, CameraController, CameraUniform};
-use model::Vertex;
-use render::create_render_pipeline;
 use render_lib::backend::RenderBackend;
+use render_lib::camera::{Camera, CameraController, CameraUniform};
+use render_lib::model::Vertex;
+use render_lib::render::create_render_pipeline;
 
 struct Instance {
     position: cgmath::Vector3<f32>,
@@ -113,7 +107,7 @@ pub struct AppState {
     is_surface_configured: bool,
     window: Arc<Window>,
     render_pipeline: wgpu::RenderPipeline,
-    depth_texture: texture::Texture,
+    depth_texture: render_lib::texture::Texture,
     camera: Camera,
     camera_controller: CameraController,
     camera_uniform: CameraUniform,
@@ -125,7 +119,7 @@ pub struct AppState {
     light_render_pipeline: wgpu::RenderPipeline,
     instances: Vec<Instance>,
     instance_buffer: wgpu::Buffer,
-    obj_model: model::Model,
+    obj_model: render_lib::model::Model,
 }
 
 impl AppState {
@@ -263,7 +257,7 @@ impl AppState {
                 label: None,
             });
 
-        let depth_texture = texture::Texture::create_depth_texture(
+        let depth_texture = render_lib::texture::Texture::create_depth_texture(
             &backend.device,
             &backend.config,
             "Depth Texture",
@@ -292,8 +286,8 @@ impl AppState {
                 &backend.device,
                 &render_pipeline_layout,
                 backend.config.format,
-                Some(texture::Texture::DEPTH_FORMAT),
-                &[model::ModelVertex::desc(), InstanceRaw::desc()],
+                Some(render_lib::texture::Texture::DEPTH_FORMAT),
+                &[render_lib::model::ModelVertex::desc(), InstanceRaw::desc()],
                 shader,
                 Some("Normal Render Pipeline"),
             )
@@ -314,8 +308,8 @@ impl AppState {
                 &backend.device,
                 &layout,
                 backend.config.format,
-                Some(texture::Texture::DEPTH_FORMAT),
-                &[model::ModelVertex::desc()],
+                Some(render_lib::texture::Texture::DEPTH_FORMAT),
+                &[render_lib::model::ModelVertex::desc()],
                 shader,
                 Some("Light Render Pipeline"),
             )
@@ -357,7 +351,7 @@ impl AppState {
                     usage: wgpu::BufferUsages::VERTEX,
                 });
 
-        let obj_model = match resources::load_model(
+        let obj_model = match render_lib::resources::load_model(
             "cube/cube.obj",
             &backend.device,
             &backend.queue,
@@ -406,7 +400,7 @@ impl AppState {
                 self.backend.config.width as f32 / self.backend.config.height as f32;
             self.camera_uniform.update_view_proj(&self.camera);
 
-            self.depth_texture = texture::Texture::create_depth_texture(
+            self.depth_texture = render_lib::texture::Texture::create_depth_texture(
                 &self.backend.device,
                 &self.backend.config,
                 "Depth Texture",
@@ -462,7 +456,7 @@ impl AppState {
 
         render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
 
-        use crate::model::DrawLight;
+        use crate::render_lib::model::DrawLight;
         render_pass.set_pipeline(&self.light_render_pipeline);
         render_pass.draw_light_model(
             &self.obj_model,
@@ -470,7 +464,7 @@ impl AppState {
             &self.light_bind_group,
         );
 
-        use model::DrawModel;
+        use render_lib::model::DrawModel;
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.draw_model_instanced(
             &self.obj_model,
