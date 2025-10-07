@@ -1,4 +1,5 @@
 use cgmath::prelude::*;
+use wgpu::include_wgsl;
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
 use winit::application::ApplicationHandler;
@@ -278,12 +279,7 @@ impl AppState {
                 });
 
         let render_pipeline = {
-            let shader = wgpu::ShaderModuleDescriptor {
-                label: Some("Normal Shader"),
-                source: wgpu::ShaderSource::Wgsl(
-                    include_str!("../assets/shaders/shader.wgsl").into(),
-                ),
-            };
+            let shader = include_wgsl!("../assets/shaders/shader.wgsl");
 
             create_render_pipeline(
                 &backend.device,
@@ -303,12 +299,7 @@ impl AppState {
                     bind_group_layouts: &[&camera_bind_group_layout, &light_bind_group_layout],
                     push_constant_ranges: &[],
                 });
-            let shader = wgpu::ShaderModuleDescriptor {
-                label: Some("Light Shader"),
-                source: wgpu::ShaderSource::Wgsl(
-                    include_str!("../assets/shaders/light.wgsl").into(),
-                ),
-            };
+            let shader = include_wgsl!("../assets/shaders/light.wgsl");
             create_render_pipeline(
                 &backend.device,
                 &layout,
