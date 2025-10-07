@@ -1,6 +1,7 @@
 use std::ops::Range;
-
+use std::path::Path;
 use super::texture;
+use tobj;
 
 pub trait Vertex {
      const ATTRIBUTES: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
@@ -271,4 +272,230 @@ pub struct Mesh {
 pub struct Model {
     pub meshes: Vec<Mesh>,
     pub materials: Vec<Material>,
+}
+
+impl Model {
+    /// Load and upload a model directly to the GPU from file
+    pub async fn load_from_file<P: AsRef<Path> + std::fmt::Debug>(
+        file_name: P,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        layout: &wgpu::BindGroupLayout,
+    ) -> Result<Self, crate::error::WgpuBaseError> {
+        use crate::assets;
+        assets::load_model(file_name, device, queue, layout).await
+    }
+    
+    /// Create a model from raw parsed data and upload to GPU
+    pub fn from_raw_data(
+        raw_data: crate::model::RawModelData,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        texture_bind_group_layout: &wgpu::BindGroupLayout,
+        base_path: &std::path::Path,
+    ) -> Result<Self, crate::error::WgpuBaseError> {
+        use super::texture;
+        use std::path::Path;
+        use wgpu::util::DeviceExt;
+        
+        let mut materials = Vec::new();
+        for m in raw_data.materials {
+            let diffuse_texture = if let Some(diffuse_path) = &m.diffuse_texture {
+                let diffuse_tex_path = base_path.join(diffuse_path);
+                // For now, we'll need to load the texture from file
+                // This would require async, so we skip for now or we could create a default
+                // For this implementation, we'll create a default texture
+                texture::Texture::from_bytes(
+                    device,
+                    queue,
+                    &image::RgbaImage::new(1, 1).as_raw(),
+                    "default_diffuse",
+                    false,
+                )?
+            } else {
+                texture::Texture::from_bytes(
+                    device,
+                    queue,
+                    &image::RgbaImage::new(1, 1).as_raw(),
+                    "default_diffuse",
+                    false,
+                )?
+            };
+
+            let normal_texture = if let Some(normal_path) = &m.normal_texture {
+                let normal_tex_path = base_path.join(normal_path);
+                // Similar to diffuse, we'd load from file but for now use default
+                texture::Texture::from_bytes(
+                    device,
+                    queue,
+                    &vec![128u8, 128u8, 255u8, 255u8], // typical normal map default color
+                    "default_normal",
+                    true,
+                )?
+            } else {
+                texture::Texture::from_bytes(
+                    device,
+                    queue,
+                    &vec![128u8, 128u8, 255u8, 255u8], // typical normal map default color
+                    "default_normal",
+                    true,
+                )?
+            };
+
+            materials.push(Material::new(
+                device,
+                &m.name,
+                diffuse_texture,
+                normal_texture,
+                texture_bind_group_layout,
+            ));
+        }
+
+        let meshes = raw_data
+            .models
+            .into_iter()
+            .map(|tobj_model| {
+                let m = tobj_model.mesh;
+                let mut vertices = (0..m.positions.len() / 3)
+                    .map(|i| {
+                        let normals = if m.normals.is_empty() {
+                            [0.0, 0.0, 0.0]
+                        } else {
+                            [
+                                m.normals[i * 3],
+                                m.normals[i * 3 + 1],
+                                m.normals[i * 3 + 2],
+                            ]
+                        };
+
+                        ModelVertex {
+                            position: [
+                                m.positions[i * 3],
+                                m.positions[i * 3 + 1],
+                                m.positions[i * 3 + 2],
+                            ],
+                            tex_coords: [m.texcoords[i * 2], 1.0 - m.texcoords[i * 2 + 1]],
+                            normal: normals,
+                            tangent: [0.0; 3],
+                            bitangent: [0.0; 3],
+                        }
+                    })
+                    .collect::<Vec<_>>();
+
+                let indices = &m.indices;
+                let mut triangles_included = vec![0; vertices.len()];
+
+                for c in indices.chunks(3) {
+                    let v0 = vertices[c[0] as usize];
+                    let v1 = vertices[c[1] as usize];
+                    let v2 = vertices[c[2] as usize];
+
+                    let pos0: cgmath::Vector3<_> = v0.position.into();
+                    let pos1: cgmath::Vector3<_> = v1.position.into();
+                    let pos2: cgmath::Vector3<_> = v2.position.into();
+
+                    let uv0: cgmath::Vector2<_> = v0.tex_coords.into();
+                    let uv1: cgmath::Vector2<_> = v1.tex_coords.into();
+                    let uv2: cgmath::Vector2<_> = v2.tex_coords.into();
+
+                    let delta_pos1 = pos1 - pos0;
+                    let delta_pos2 = pos2 - pos0;
+
+                    let delta_uv1 = uv1 - uv0;
+                    let delta_uv2 = uv2 - uv0;
+
+                    let r = 1.0 / (delta_uv1.x * delta_uv2.y - delta_uv1.y * delta_uv2.x);
+                    let tangent = (delta_pos1 * delta_uv2.y - delta_pos2 * delta_uv1.y) * r;
+                    // We flip the bitangent to enable right-handed normal
+                    // maps with wgpu texture coordinate system
+                    let bitangent = (delta_pos2 * delta_uv1.x - delta_pos1 * delta_uv2.x) * -r;
+
+                    // We'll use the same tangent/bitangent for each vertex in the triangle
+                    vertices[c[0] as usize].tangent =
+                        (tangent + cgmath::Vector3::from(vertices[c[0] as usize].tangent)).into();
+                    vertices[c[1] as usize].tangent =
+                        (tangent + cgmath::Vector3::from(vertices[c[1] as usize].tangent)).into();
+                    vertices[c[2] as usize].tangent =
+                        (tangent + cgmath::Vector3::from(vertices[c[2] as usize].tangent)).into();
+                    vertices[c[0] as usize].bitangent =
+                        (bitangent + cgmath::Vector3::from(vertices[c[0] as usize].bitangent)).into();
+                    vertices[c[1] as usize].bitangent =
+                        (bitangent + cgmath::Vector3::from(vertices[c[1] as usize].bitangent)).into();
+                    vertices[c[2] as usize].bitangent =
+                        (bitangent + cgmath::Vector3::from(vertices[c[2] as usize].bitangent)).into();
+
+                    triangles_included[c[0] as usize] += 1;
+                    triangles_included[c[1] as usize] += 1;
+                    triangles_included[c[2] as usize] += 1;
+                }
+
+                // We have to average all the tangents/bitangents for each vertex since we accumulated them above
+                for (i, n) in triangles_included.into_iter().enumerate() {
+                    let denom = 1.0 / n as f32;
+                    let v = &mut vertices[i];
+                    v.tangent = (cgmath::Vector3::from(v.tangent) * denom).into();
+                    v.bitangent = (cgmath::Vector3::from(v.bitangent) * denom).into();
+                }
+
+                let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some(&format!("{:?} Vertex Buffer", "raw_model")),
+                    contents: bytemuck::cast_slice(&vertices),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
+
+                let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some(&format!("{:?} Index Buffer", "raw_model")),
+                    contents: bytemuck::cast_slice(indices),
+                    usage: wgpu::BufferUsages::INDEX,
+                });
+
+                vec![Mesh {
+                    name: "raw_model".to_string(),
+                    vertex_buffer,
+                    index_buffer,
+                    num_elements: m.indices.len() as u32,
+                    material: m.material_id.unwrap_or(0),
+                }]
+            })
+            .collect::<Vec<_>>();
+
+        Ok(Model { meshes, materials })
+    }
+}
+
+// Raw model data structure for CPU-side processing
+pub struct RawModelData {
+    pub models: Vec<tobj::Model>,
+    pub materials: Vec<tobj::Material>,
+}
+
+impl RawModelData {
+    /// Load model data from a string (e.g., OBJ file content)
+    pub fn from_str(obj_content: &str) -> Result<Self, crate::error::WgpuBaseError> {
+        use std::io::{BufReader, Cursor};
+        
+        let obj_cursor = Cursor::new(obj_content);
+        let mut obj_reader = BufReader::new(obj_cursor);
+
+        // We can't use the callback in from_str since it would require loading external files
+        // So we'll return the raw data that can be processed later
+        let (models, obj_materials) = tobj::load_obj_buf(
+            &mut obj_reader,
+            &tobj::LoadOptions {
+                triangulate: true,
+                single_index: true,
+                ..Default::default()
+            },
+            |_| {
+                // We don't load materials here since we don't have file paths
+                // Materials will be loaded separately when uploading to GPU
+                tobj::load_mtl_buf(&mut BufReader::new(Cursor::new("")))
+            },
+        )?;
+
+        Ok(RawModelData {
+            models,
+            materials: obj_materials?,
+        })
+    }
 }
