@@ -63,7 +63,7 @@ pub async fn load_model<P: AsRef<Path> + std::fmt::Debug>(
         },
         |p| {
             let full_path = base_path.join(p);
-            let mat_text = match std::fs::read_to_string(full_path)?;
+            let mat_text = std::fs::read_to_string(full_path).expect("should be a WgpuBaseError");
             tobj::load_mtl_buf(&mut BufReader::new(Cursor::new(mat_text)))
         },
     )?;
