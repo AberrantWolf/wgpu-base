@@ -1,6 +1,6 @@
 use image::GenericImageView;
 
-use crate::error::WgpuBaseError;
+use super::error::WgpuBaseError;
 
 pub struct Texture {
     #[allow(unused)]

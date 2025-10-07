@@ -526,9 +526,23 @@ impl ApplicationHandler<AppState> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window_attributes = Window::default_attributes();
 
-        let window = Arc::new(event_loop.create_window(window_attributes).map_err(|_| WgpuBaseError::WindowCreationFailed)?);
+        let window = match event_loop.create_window(window_attributes) {
+            Ok(w) => Arc::new(w),
+            Err(_) => {
+                log::error!("Failed to create window");
+                event_loop.exit();
+                return;
+            }
+        };
 
-        self.state = Some(pollster::block_on(AppState::new(window))?);
+        match pollster::block_on(AppState::new(window)) {
+            Ok(app_state) => self.state = Some(app_state),
+            Err(e) => {
+                log::error!("Failed to initialize app state: {:?}", e);
+                event_loop.exit();
+                return;
+            }
+        }
     }
 
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, mut event: AppState) {

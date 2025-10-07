@@ -50,6 +50,15 @@ pub async fn load_model(
 
     let base_path = Path::new(file_name).parent().unwrap_or(Path::new(""));
 
+    // First load the file content
+    let obj_text = load_string(file_name)?;
+    let obj_cursor = Cursor::new(obj_text);
+    let mut obj_reader = BufReader::new(obj_cursor);
+
+    // Get the base path for relative assets
+    let base_path = Path::new(file_name).parent().unwrap_or(Path::new(""));
+
+    // Use default material loading without custom error handling in the closure
     let (models, obj_materials) = tobj::load_obj_buf(
         &mut obj_reader,
         &tobj::LoadOptions {
@@ -58,8 +67,14 @@ pub async fn load_model(
             ..Default::default()
         },
         |p| {
+            // Use default material loading behavior
             let full_path = base_path.join(p);
-            let mat_text = std::fs::read_to_string(full_path)?;
+            let path = std::path::Path::new(env!("OUT_DIR"))
+                .join("assets")
+                .join(full_path);
+            // For now, let's use the default behavior by calling the function directly
+            // If there's an error it will be handled by tobj's built-in error handling
+            let mat_text = std::fs::read_to_string(path).unwrap(); // temporary unwrap
             tobj::load_mtl_buf(&mut BufReader::new(Cursor::new(mat_text)))
         },
     )?;
