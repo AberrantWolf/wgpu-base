@@ -5,37 +5,39 @@ use std::{
 };
 use wgpu::util::DeviceExt;
 
-pub fn load_string(file_name: &str) -> Result<String, WgpuBaseError> {
+pub fn load_string<P: AsRef<Path>>(file_name: P) -> Result<String, WgpuBaseError> {
     let txt = {
         let path = std::path::Path::new(env!("OUT_DIR"))
             .join("assets")
-            .join(file_name);
+            .join(file_name.as_ref());
         log::debug!("Loading file to string: {}", path.display());
         std::fs::read_to_string(path)?
     };
     Ok(txt)
 }
 
-pub async fn load_binary(file_name: &str) -> Result<Vec<u8>, WgpuBaseError> {
+pub async fn load_binary<P: AsRef<Path>>(file_name: P) -> Result<Vec<u8>, WgpuBaseError> {
     let data = {
         let path = std::path::Path::new(env!("OUT_DIR"))
             .join("assets")
-            .join(file_name);
-        log::debug!("Loading file to string: {}", path.display());
+            .join(file_name.as_ref());
+        log::debug!("Loading file to binary: {}", path.display());
         std::fs::read(path)?
     };
 
     Ok(data)
 }
 
-pub async fn load_texture(
-    file_name: &str,
+pub async fn load_texture<P: AsRef<Path>>(
+    file_name: P,
     is_normal_map: bool,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
 ) -> Result<texture::Texture, WgpuBaseError> {
-    let data = load_binary(file_name).await?;
-    texture::Texture::from_bytes(device, queue, &data, file_name, is_normal_map)
+    let path = file_name.as_ref();
+    let data = load_binary(path).await?;
+    let label = path.to_str().ok_or_else(|| WgpuBaseError::Asset("Invalid path".to_string()))?;
+    texture::Texture::from_bytes(device, queue, &data, label, is_normal_map)
 }
 
 pub async fn load_model(
