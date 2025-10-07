@@ -3,6 +3,14 @@ use std::ops::Range;
 use super::texture;
 
 pub trait Vertex {
+     const ATTRIBUTES: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
+            0 => Float32x3, // position
+            1 => Float32x2, // tex_coords
+            2 => Float32x3, // normal
+            3 => Float32x3, // tangent
+            4 => Float32x3, // bitangent
+        ];
+
     fn desc() -> wgpu::VertexBufferLayout<'static>;
 }
 
@@ -196,17 +204,10 @@ pub struct ModelVertex {
 
 impl Vertex for ModelVertex {
    fn desc() -> wgpu::VertexBufferLayout<'static> {
-        const ATTRIBUTES: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
-            0 => Float32x3, // position
-            1 => Float32x2, // tex_coords
-            2 => Float32x3, // normal
-            3 => Float32x3, // tangent
-            4 => Float32x3, // bitangent
-        ];
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<ModelVertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &ATTRIBUTES,
+            attributes: &Self::ATTRIBUTES, // Use the const in the trait so you can share it amongst other impls..
         }
     }
 }
