@@ -1,11 +1,11 @@
-use super::{model, texture};
+use super::{error::WgpuBaseError, model, texture};
 use std::{
     io::{BufReader, Cursor},
     path::Path,
 };
 use wgpu::util::DeviceExt;
 
-pub fn load_string(file_name: &str) -> anyhow::Result<String> {
+pub fn load_string(file_name: &str) -> Result<String, WgpuBaseError> {
     let txt = {
         let path = std::path::Path::new(env!("OUT_DIR"))
             .join("assets")
@@ -16,7 +16,7 @@ pub fn load_string(file_name: &str) -> anyhow::Result<String> {
     Ok(txt)
 }
 
-pub async fn load_binary(file_name: &str) -> anyhow::Result<Vec<u8>> {
+pub async fn load_binary(file_name: &str) -> Result<Vec<u8>, WgpuBaseError> {
     let data = {
         let path = std::path::Path::new(env!("OUT_DIR"))
             .join("assets")
@@ -33,7 +33,7 @@ pub async fn load_texture(
     is_normal_map: bool,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-) -> anyhow::Result<texture::Texture> {
+) -> Result<texture::Texture, WgpuBaseError> {
     let data = load_binary(file_name).await?;
     texture::Texture::from_bytes(device, queue, &data, file_name, is_normal_map)
 }
@@ -43,7 +43,7 @@ pub async fn load_model(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
-) -> anyhow::Result<model::Model> {
+) -> Result<model::Model, WgpuBaseError> {
     let obj_text = load_string(file_name)?;
     let obj_cursor = Cursor::new(obj_text);
     let mut obj_reader = BufReader::new(obj_cursor);
@@ -59,19 +59,40 @@ pub async fn load_model(
         },
         |p| {
             let full_path = base_path.join(p);
-            let mat_text = load_string(&full_path.to_string_lossy()).unwrap();
+            let mat_text = std::fs::read_to_string(full_path)?;
             tobj::load_mtl_buf(&mut BufReader::new(Cursor::new(mat_text)))
         },
     )?;
 
     let mut materials = Vec::new();
     for m in obj_materials? {
-        let diffuse_tex_path = base_path.join(&m.diffuse_texture.unwrap());
-        let normal_tex_path = base_path.join(&m.normal_texture.unwrap());
-        let diffuse_texture =
-            load_texture(&diffuse_tex_path.to_string_lossy(), false, device, queue).await?;
-        let normal_texture =
-            load_texture(&normal_tex_path.to_string_lossy(), true, device, queue).await?;
+        let diffuse_texture = if let Some(diffuse_path) = &m.diffuse_texture {
+            let diffuse_tex_path = base_path.join(diffuse_path);
+            load_texture(&diffuse_tex_path.to_string_lossy(), false, device, queue).await?
+        } else {
+            // Create a default white texture as a fallback
+            texture::Texture::from_bytes(
+                device,
+                queue,
+                &image::RgbaImage::new(1, 1).as_raw(),
+                "default_diffuse",
+                false,
+            ).map_err(WgpuBaseError::from)?
+        };
+
+        let normal_texture = if let Some(normal_path) = &m.normal_texture {
+            let normal_tex_path = base_path.join(normal_path);
+            load_texture(&normal_tex_path.to_string_lossy(), true, device, queue).await?
+        } else {
+            // Create a default normal texture (blue color representing normal = [0,0,1])
+            texture::Texture::from_bytes(
+                device,
+                queue,
+                &vec![128u8, 128u8, 255u8, 255u8], // typical normal map default color
+                "default_normal",
+                true,
+            ).map_err(WgpuBaseError::from)?
+        };
 
         materials.push(model::Material::new(
             device,
