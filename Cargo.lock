@@ -2208,6 +2208,7 @@ dependencies = [
  "image",
  "log",
  "pollster",
+ "thiserror 2.0.17",
  "tobj",
  "wgpu",
  "winit",

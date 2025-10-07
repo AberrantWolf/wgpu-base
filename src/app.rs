@@ -11,6 +11,7 @@ mod render_lib;
 
 use render_lib::backend::RenderBackend;
 use render_lib::camera::{Camera, CameraController, CameraUniform};
+use render_lib::error::WgpuBaseError;
 use render_lib::model::Vertex;
 use render_lib::render::create_render_pipeline;
 
@@ -123,7 +124,7 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub async fn new(window: Arc<Window>) -> anyhow::Result<Self> {
+    pub async fn new(window: Arc<Window>) -> Result<Self, WgpuBaseError> {
         let backend = RenderBackend::create(&window).await?;
 
         let texture_bind_group_layout =
@@ -534,9 +535,9 @@ impl ApplicationHandler<AppState> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window_attributes = Window::default_attributes();
 
-        let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
+        let window = Arc::new(event_loop.create_window(window_attributes).map_err(|_| WgpuBaseError::WindowCreationFailed)?);
 
-        self.state = Some(pollster::block_on(AppState::new(window)).unwrap());
+        self.state = Some(pollster::block_on(AppState::new(window))?);
     }
 
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, mut event: AppState) {
@@ -586,7 +587,7 @@ impl ApplicationHandler<AppState> for App {
     }
 }
 
-pub fn run() -> anyhow::Result<()> {
+pub fn run() -> Result<(), WgpuBaseError> {
     env_logger::init();
     let event_loop = EventLoop::with_user_event().build()?;
     let mut app = App::new();
@@ -595,6 +596,6 @@ pub fn run() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn main() -> anyhow::Result<()> {
+pub fn main() -> Result<(), WgpuBaseError> {
     run()
 }
