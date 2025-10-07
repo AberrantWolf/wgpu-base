@@ -1,6 +1,6 @@
 use super::{error::WgpuBaseError, model, texture};
 use std::{
-    io::{BufReader, Cursor},
+    io::{self, BufReader, Cursor},
     path::Path,
 };
 use wgpu::util::DeviceExt;
@@ -63,7 +63,7 @@ pub async fn load_model<P: AsRef<Path> + std::fmt::Debug>(
         },
         |p| {
             let full_path = base_path.join(p);
-            let mat_text = std::fs::read_to_string(full_path).map_err(tobj::LoadError::Io)?;
+            let mat_text = match std::fs::read_to_string(full_path)?;
             tobj::load_mtl_buf(&mut BufReader::new(Cursor::new(mat_text)))
         },
     )?;
