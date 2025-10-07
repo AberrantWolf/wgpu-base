@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
-use anyhow::*;
 use wgpu::ExperimentalFeatures;
 use winit::window::Window;
+
+use super::error::WgpuBaseError;
 
 pub struct RenderBackend {
     pub surface: wgpu::Surface<'static>,
@@ -12,7 +13,7 @@ pub struct RenderBackend {
 }
 
 impl RenderBackend {
-    pub async fn create(window: &Arc<Window>) -> Result<Self> {
+    pub async fn create(window: &Arc<Window>) -> Result<Self, WgpuBaseError> {
         let size = window.inner_size();
 
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
@@ -20,7 +21,7 @@ impl RenderBackend {
             ..Default::default()
         });
 
-        let surface = instance.create_surface(window.clone()).unwrap();
+        let surface = instance.create_surface(window.clone()).map_err(|_| WgpuBaseError::SurfaceCreationFailed)?;
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {

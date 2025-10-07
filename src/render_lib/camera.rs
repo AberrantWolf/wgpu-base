@@ -107,6 +107,8 @@ impl CameraController {
         }
     }
 
+    // TODO: is this not perma-pegged to the frame rate? 
+    // should it not be?
     pub fn update_camera(&self, camera: &mut Camera) {
         use cgmath::InnerSpace;
         let forward = camera.target - camera.eye;
