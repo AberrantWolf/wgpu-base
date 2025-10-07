@@ -5,23 +5,23 @@ use std::{
 };
 use wgpu::util::DeviceExt;
 
-pub fn load_string<P: AsRef<Path>>(file_name: P) -> Result<String, WgpuBaseError> {
+pub fn load_string<P:AsRef<Path>>(file_name:P) -> Result<String, WgpuBaseError> {
     let txt = {
         let path = std::path::Path::new(env!("OUT_DIR"))
             .join("assets")
-            .join(file_name.as_ref());
+            .join(file_name);
         log::debug!("Loading file to string: {}", path.display());
         std::fs::read_to_string(path)?
     };
     Ok(txt)
 }
 
-pub async fn load_binary<P: AsRef<Path>>(file_name: P) -> Result<Vec<u8>, WgpuBaseError> {
+pub async fn load_binary<P:AsRef<Path>>(file_name: P) -> Result<Vec<u8>, WgpuBaseError> {
     let data = {
         let path = std::path::Path::new(env!("OUT_DIR"))
             .join("assets")
-            .join(file_name.as_ref());
-        log::debug!("Loading file to binary: {}", path.display());
+            .join(file_name);
+        log::debug!("Loading file to string: {}", path.display());
         std::fs::read(path)?
     };
 
@@ -36,21 +36,24 @@ pub async fn load_texture<P: AsRef<Path>>(
 ) -> Result<texture::Texture, WgpuBaseError> {
     let path = file_name.as_ref();
     let data = load_binary(path).await?;
-    let label = path.to_str().ok_or_else(|| WgpuBaseError::Asset("Invalid path".to_string()))?;
+    let label = path.file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("texture");
     texture::Texture::from_bytes(device, queue, &data, label, is_normal_map)
 }
 
-pub async fn load_model<P: AsRef<Path>>(
-    file_name: P,
+pub async fn load_model(
+    file_name: &str,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
 ) -> Result<model::Model, WgpuBaseError> {
-    let path = file_name.as_ref();
-    let base_path = path.parent().unwrap_or(Path::new(""));
-    let obj_text = load_string(path)?;
+    let obj_text = load_string(file_name)?;
+    let obj_cursor = Cursor::new(obj_text);
+    let mut obj_reader = BufReader::new(obj_cursor);
 
-    // Use default material loading without custom error handling in the closure
+    let base_path = Path::new(file_name).parent().unwrap_or(Path::new(""));
+
     let (models, obj_materials) = tobj::load_obj_buf(
         &mut obj_reader,
         &tobj::LoadOptions {
@@ -59,14 +62,8 @@ pub async fn load_model<P: AsRef<Path>>(
             ..Default::default()
         },
         |p| {
-            // Use default material loading behavior
             let full_path = base_path.join(p);
-            let path = std::path::Path::new(env!("OUT_DIR"))
-                .join("assets")
-                .join(full_path);
-            // For now, let's use the default behavior by calling the function directly
-            // If there's an error it will be handled by tobj's built-in error handling
-            let mat_text = std::fs::read_to_string(path).unwrap(); // temporary unwrap
+            let mat_text = std::fs::read_to_string(full_path).map_err(tobj::LoadError::Io)?;
             tobj::load_mtl_buf(&mut BufReader::new(Cursor::new(mat_text)))
         },
     )?;
@@ -75,7 +72,7 @@ pub async fn load_model<P: AsRef<Path>>(
     for m in obj_materials? {
         let diffuse_texture = if let Some(diffuse_path) = &m.diffuse_texture {
             let diffuse_tex_path = base_path.join(diffuse_path);
-            load_texture(&diffuse_tex_path.to_string_lossy(), false, device, queue).await?
+            load_texture(&diffuse_tex_path, false, device, queue).await?
         } else {
             // Create a default white texture as a fallback
             texture::Texture::from_bytes(
@@ -84,12 +81,12 @@ pub async fn load_model<P: AsRef<Path>>(
                 &image::RgbaImage::new(1, 1).as_raw(),
                 "default_diffuse",
                 false,
-            ).map_err(WgpuBaseError::from)?
+            )?
         };
 
         let normal_texture = if let Some(normal_path) = &m.normal_texture {
             let normal_tex_path = base_path.join(normal_path);
-            load_texture(&normal_tex_path.to_string_lossy(), true, device, queue).await?
+            load_texture(&normal_tex_path, true, device, queue).await?
         } else {
             // Create a default normal texture (blue color representing normal = [0,0,1])
             texture::Texture::from_bytes(
@@ -98,7 +95,7 @@ pub async fn load_model<P: AsRef<Path>>(
                 &vec![128u8, 128u8, 255u8, 255u8], // typical normal map default color
                 "default_normal",
                 true,
-            ).map_err(WgpuBaseError::from)?
+            )?
         };
 
         materials.push(model::Material::new(
