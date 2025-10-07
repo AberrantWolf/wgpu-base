@@ -40,25 +40,15 @@ pub async fn load_texture<P: AsRef<Path>>(
     texture::Texture::from_bytes(device, queue, &data, label, is_normal_map)
 }
 
-pub async fn load_model(
-    file_name: &str,
+pub async fn load_model<P: AsRef<Path>>(
+    file_name: P,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
 ) -> Result<model::Model, WgpuBaseError> {
-    let obj_text = load_string(file_name)?;
-    let obj_cursor = Cursor::new(obj_text);
-    let mut obj_reader = BufReader::new(obj_cursor);
-
-    let base_path = Path::new(file_name).parent().unwrap_or(Path::new(""));
-
-    // First load the file content
-    let obj_text = load_string(file_name)?;
-    let obj_cursor = Cursor::new(obj_text);
-    let mut obj_reader = BufReader::new(obj_cursor);
-
-    // Get the base path for relative assets
-    let base_path = Path::new(file_name).parent().unwrap_or(Path::new(""));
+    let path = file_name.as_ref();
+    let base_path = path.parent().unwrap_or(Path::new(""));
+    let obj_text = load_string(path)?;
 
     // Use default material loading without custom error handling in the closure
     let (models, obj_materials) = tobj::load_obj_buf(
