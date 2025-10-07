@@ -295,7 +295,6 @@ impl Model {
         base_path: &std::path::Path,
     ) -> Result<Self, crate::error::WgpuBaseError> {
         use super::texture;
-        use std::path::Path;
         use wgpu::util::DeviceExt;
         
         let mut materials = Vec::new();
@@ -449,13 +448,13 @@ impl Model {
                     usage: wgpu::BufferUsages::INDEX,
                 });
 
-                vec![Mesh {
+                Mesh {
                     name: "raw_model".to_string(),
                     vertex_buffer,
                     index_buffer,
                     num_elements: m.indices.len() as u32,
                     material: m.material_id.unwrap_or(0),
-                }]
+                }
             })
             .collect::<Vec<_>>();
 
