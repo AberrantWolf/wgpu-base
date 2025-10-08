@@ -1,4 +1,5 @@
 use cgmath::prelude::*;
+use wgpu::include_wgsl;
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
 use winit::application::ApplicationHandler;
@@ -11,6 +12,7 @@ mod render_lib;
 
 use render_lib::backend::RenderBackend;
 use render_lib::camera::{Camera, CameraController, CameraUniform};
+use render_lib::error::WgpuBaseError;
 use render_lib::model::Vertex;
 use render_lib::render::create_render_pipeline;
 
@@ -123,7 +125,7 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub async fn new(window: Arc<Window>) -> anyhow::Result<Self> {
+    pub async fn new(window: Arc<Window>) -> Result<Self, WgpuBaseError> {
         let backend = RenderBackend::create(&window).await?;
 
         let texture_bind_group_layout =
@@ -277,12 +279,7 @@ impl AppState {
                 });
 
         let render_pipeline = {
-            let shader = wgpu::ShaderModuleDescriptor {
-                label: Some("Normal Shader"),
-                source: wgpu::ShaderSource::Wgsl(
-                    include_str!("../assets/shaders/shader.wgsl").into(),
-                ),
-            };
+            let shader = include_wgsl!("../assets/shaders/shader.wgsl");
 
             create_render_pipeline(
                 &backend.device,
@@ -302,12 +299,7 @@ impl AppState {
                     bind_group_layouts: &[&camera_bind_group_layout, &light_bind_group_layout],
                     push_constant_ranges: &[],
                 });
-            let shader = wgpu::ShaderModuleDescriptor {
-                label: Some("Light Shader"),
-                source: wgpu::ShaderSource::Wgsl(
-                    include_str!("../assets/shaders/light.wgsl").into(),
-                ),
-            };
+            let shader = include_wgsl!("../assets/shaders/light.wgsl");
             create_render_pipeline(
                 &backend.device,
                 &layout,
@@ -534,9 +526,23 @@ impl ApplicationHandler<AppState> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window_attributes = Window::default_attributes();
 
-        let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
+        let window = match event_loop.create_window(window_attributes) {
+            Ok(w) => Arc::new(w),
+            Err(_) => {
+                log::error!("Failed to create window");
+                event_loop.exit();
+                return;
+            }
+        };
 
-        self.state = Some(pollster::block_on(AppState::new(window)).unwrap());
+        match pollster::block_on(AppState::new(window)) {
+            Ok(app_state) => self.state = Some(app_state),
+            Err(e) => {
+                log::error!("Failed to initialize app state: {:?}", e);
+                event_loop.exit();
+                return;
+            }
+        }
     }
 
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, mut event: AppState) {
@@ -586,7 +592,7 @@ impl ApplicationHandler<AppState> for App {
     }
 }
 
-pub fn run() -> anyhow::Result<()> {
+pub fn run() -> Result<(), WgpuBaseError> {
     env_logger::init();
     let event_loop = EventLoop::with_user_event().build()?;
     let mut app = App::new();
@@ -595,6 +601,6 @@ pub fn run() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn main() -> anyhow::Result<()> {
+pub fn main() -> Result<(), WgpuBaseError> {
     run()
 }

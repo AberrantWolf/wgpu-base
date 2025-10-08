@@ -22,6 +22,7 @@ image = { version = "0.25", default-features = false, features = [
 ] }
 log = "0.4"
 pollster = "0.4"
+thiserror = "2.0"
 tobj = { version = "4.0", default-features = false, features = ["async"] }
 wgpu = "27"
 winit = "0.30"

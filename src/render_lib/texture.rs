@@ -1,5 +1,6 @@
-use anyhow::*;
 use image::GenericImageView;
+
+use super::error::WgpuBaseError;
 
 pub struct Texture {
     #[allow(unused)]
@@ -61,7 +62,7 @@ impl Texture {
         bytes: &[u8],
         label: &str,
         is_normal_map: bool,
-    ) -> Result<Self> {
+    ) -> Result<Self, WgpuBaseError> {
         let img = image::load_from_memory(bytes)?;
         Self::from_image(device, queue, &img, Some(label), is_normal_map)
     }
@@ -72,7 +73,7 @@ impl Texture {
         img: &image::DynamicImage,
         label: Option<&str>,
         is_normal_map: bool,
-    ) -> Result<Self> {
+    ) -> Result<Self, WgpuBaseError> {
         let rgba = img.to_rgba8();
         let dimensions = img.dimensions();
 
